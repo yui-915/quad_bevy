@@ -1,5 +1,6 @@
 //! Contains types that allow disjoint mutable access to a [`World`].
 
+#![allow(clippy::doc_lazy_continuation)]
 #![warn(unsafe_op_in_unsafe_fn)]
 
 use super::{Mut, Ref, World, WorldId};

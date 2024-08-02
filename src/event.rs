@@ -1,5 +1,7 @@
 //! Event handling types.
 
+#![allow(clippy::doc_lazy_continuation)]
+
 use crate as bevy_ecs;
 use crate::change_detection::MutUntyped;
 use crate::{

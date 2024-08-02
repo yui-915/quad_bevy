@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 use crate::storage::SparseSetIndex;
 use bevy_utils::HashSet;
 use core::fmt;

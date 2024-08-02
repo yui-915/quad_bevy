@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 use std::{
     alloc::{handle_alloc_error, Layout},
     cell::UnsafeCell,

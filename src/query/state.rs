@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 use crate::{
     archetype::{Archetype, ArchetypeComponentId, ArchetypeGeneration, ArchetypeId},
     batching::BatchingStrategy,

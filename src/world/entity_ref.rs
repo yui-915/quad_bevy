@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 use crate::{
     archetype::{Archetype, ArchetypeId, Archetypes},
     bundle::{Bundle, BundleId, BundleInfo, BundleInserter, DynamicBundle},
