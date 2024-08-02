@@ -25,6 +25,7 @@ mod cow_arc;
 mod default;
 mod once;
 mod parallel_queue;
+mod webtime_replacement;
 
 pub use ahash::{AHasher, RandomState};
 pub use bevy_utils_proc_macros::*;
@@ -33,7 +34,9 @@ pub use default::default;
 pub use hashbrown;
 pub use parallel_queue::*;
 pub use tracing;
-pub use web_time::{Duration, Instant, SystemTime, SystemTimeError, TryFromFloatSecsError};
+pub use webtime_replacement::{
+    Duration, Instant, SystemTime, SystemTimeError, TryFromFloatSecsError,
+};
 
 use hashbrown::hash_map::RawEntryMut;
 use std::{
