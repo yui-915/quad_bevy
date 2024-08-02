@@ -1,8 +1,6 @@
-mod multi_threaded;
 mod simple;
 mod single_threaded;
 
-pub use self::multi_threaded::{MainThreadExecutor, MultiThreadedExecutor};
 pub use self::simple::SimpleExecutor;
 pub use self::single_threaded::SingleThreadedExecutor;
 
@@ -29,27 +27,21 @@ pub(super) trait SystemExecutor: Send + Sync {
 
 /// Specifies how a [`Schedule`](super::Schedule) will be run.
 ///
-/// The default depends on the target platform:
-///  - [`SingleThreaded`](ExecutorKind::SingleThreaded) on WASM.
-///  - [`MultiThreaded`](ExecutorKind::MultiThreaded) everywhere else.
+/// The defaults to [`SingleThreaded`](ExecutorKind::SingleThreaded)
 #[derive(PartialEq, Eq, Default, Debug, Copy, Clone)]
 pub enum ExecutorKind {
     /// Runs the schedule using a single thread.
     ///
     /// Useful if you're dealing with a single-threaded environment, saving your threads for
     /// other things, or just trying minimize overhead.
-    #[cfg_attr(any(target_arch = "wasm32", not(feature = "multi_threaded")), default)]
+    #[default]
     SingleThreaded,
     /// Like [`SingleThreaded`](ExecutorKind::SingleThreaded) but calls [`apply_deferred`](crate::system::System::apply_deferred)
     /// immediately after running each system.
     Simple,
-    /// Runs the schedule using a thread pool. Non-conflicting systems can run in parallel.
-    #[cfg_attr(all(not(target_arch = "wasm32"), feature = "multi_threaded"), default)]
-    MultiThreaded,
 }
 
-/// Holds systems and conditions of a [`Schedule`](super::Schedule) sorted in topological order
-/// (along with dependency information for `multi_threaded` execution).
+/// Holds systems and conditions of a [`Schedule`](super::Schedule) sorted in topological order.
 ///
 /// Since the arrays are sorted in the same order, elements are referenced by their index.
 /// [`FixedBitSet`] is used as a smaller, more efficient substitute of `HashSet<usize>`.
@@ -61,12 +53,6 @@ pub struct SystemSchedule {
     pub(super) systems: Vec<BoxedSystem>,
     /// Indexed by system node id.
     pub(super) system_conditions: Vec<Vec<BoxedCondition>>,
-    /// Indexed by system node id.
-    /// Number of systems that the system immediately depends on.
-    pub(super) system_dependencies: Vec<usize>,
-    /// Indexed by system node id.
-    /// List of systems that immediately depend on the system.
-    pub(super) system_dependents: Vec<Vec<usize>>,
     /// Indexed by system node id.
     /// List of sets containing the system that have conditions
     pub(super) sets_with_conditions_of_systems: Vec<FixedBitSet>,
@@ -90,8 +76,6 @@ impl SystemSchedule {
             set_conditions: Vec::new(),
             system_ids: Vec::new(),
             set_ids: Vec::new(),
-            system_dependencies: Vec::new(),
-            system_dependents: Vec::new(),
             sets_with_conditions_of_systems: Vec::new(),
             systems_in_sets_with_conditions: Vec::new(),
         }
@@ -150,16 +134,6 @@ mod __rust_begin_short_backtrace {
     ) {
         system.run_unsafe((), world);
         black_box(());
-    }
-
-    /// # Safety
-    /// See `ReadOnlySystem::run_unsafe`.
-    #[inline(never)]
-    pub(super) unsafe fn readonly_run_unsafe<O: 'static>(
-        system: &mut dyn ReadOnlySystem<In = (), Out = O>,
-        world: UnsafeWorldCell,
-    ) -> O {
-        black_box(system.run_unsafe((), world))
     }
 
     #[inline(never)]

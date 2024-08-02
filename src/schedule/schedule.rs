@@ -204,7 +204,6 @@ fn make_executor(kind: ExecutorKind) -> Box<dyn SystemExecutor> {
     match kind {
         ExecutorKind::Simple => Box::new(SimpleExecutor::new()),
         ExecutorKind::SingleThreaded => Box::new(SingleThreadedExecutor::new()),
-        ExecutorKind::MultiThreaded => Box::new(MultiThreadedExecutor::new()),
     }
 }
 
@@ -244,7 +243,7 @@ pub enum Chain {
 /// fn system_one() { println!("System 1 works!") }
 /// fn system_two() { println!("System 2 works!") }
 /// fn system_three() { println!("System 3 works!") }
-///    
+///
 /// fn main() {
 ///     let mut world = World::new();
 ///     let mut schedule = Schedule::default();
@@ -1418,26 +1417,6 @@ impl ScheduleGraph {
         let set_with_conditions_count = hg_set_ids.len();
         let hg_node_count = self.hierarchy.graph.node_count();
 
-        // get the number of dependencies and the immediate dependents of each system
-        // (needed by multi_threaded executor to run systems in the correct order)
-        let mut system_dependencies = Vec::with_capacity(sys_count);
-        let mut system_dependents = Vec::with_capacity(sys_count);
-        for &sys_id in &dg_system_ids {
-            let num_dependencies = dependency_flattened_dag
-                .graph
-                .neighbors_directed(sys_id, Incoming)
-                .count();
-
-            let dependents = dependency_flattened_dag
-                .graph
-                .neighbors_directed(sys_id, Outgoing)
-                .map(|dep_id| dg_system_idx_map[&dep_id])
-                .collect::<Vec<_>>();
-
-            system_dependencies.push(num_dependencies);
-            system_dependents.push(dependents);
-        }
-
         // get the rows and columns of the hierarchy graph's reachability matrix
         // (needed to we can evaluate conditions in the correct order)
         let mut systems_in_sets_with_conditions =
@@ -1472,8 +1451,6 @@ impl ScheduleGraph {
             set_conditions: Vec::with_capacity(set_with_conditions_count),
             system_ids: dg_system_ids,
             set_ids: hg_set_ids,
-            system_dependencies,
-            system_dependents,
             sets_with_conditions_of_systems,
             systems_in_sets_with_conditions,
         }

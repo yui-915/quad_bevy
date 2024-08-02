@@ -57,7 +57,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
     ///     query.par_iter().for_each_init(|| queue.borrow_local_mut(),|local_queue,item| {
     ///         **local_queue += 1;
     ///      });
-    ///     
+    ///
     ///     // collect value from every thread
     ///     let entity_count: usize = queue.iter_mut().map(|v| *v).sum();
     /// }
@@ -78,7 +78,6 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
             func(&mut init, item);
             init
         };
-        #[cfg(any(target_arch = "wasm32", not(feature = "multi_threaded")))]
         {
             let init = init();
             // SAFETY:
@@ -93,56 +92,5 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
                     .fold(init, func);
             }
         }
-        #[cfg(all(not(target_arch = "wasm32"), feature = "multi_threaded"))]
-        {
-            let thread_count = bevy_tasks::ComputeTaskPool::get().thread_num();
-            if thread_count <= 1 {
-                let init = init();
-                // SAFETY: See the safety comment above.
-                unsafe {
-                    self.state
-                        .iter_unchecked_manual(self.world, self.last_run, self.this_run)
-                        .fold(init, func);
-                }
-            } else {
-                // Need a batch size of at least 1.
-                let batch_size = self.get_batch_size(thread_count).max(1);
-                // SAFETY: See the safety comment above.
-                unsafe {
-                    self.state.par_fold_init_unchecked_manual(
-                        init,
-                        self.world,
-                        batch_size,
-                        func,
-                        self.last_run,
-                        self.this_run,
-                    );
-                }
-            }
-        }
-    }
-
-    #[cfg(all(not(target_arch = "wasm32"), feature = "multi_threaded"))]
-    fn get_batch_size(&self, thread_count: usize) -> usize {
-        let max_items = || {
-            let id_iter = self.state.matched_storage_ids.iter();
-            if D::IS_DENSE && F::IS_DENSE {
-                // SAFETY: We only access table metadata.
-                let tables = unsafe { &self.world.world_metadata().storages().tables };
-                id_iter
-                    // SAFETY: The if check ensures that matched_storage_ids stores TableIds
-                    .map(|id| unsafe { tables[id.table_id].entity_count() })
-                    .max()
-            } else {
-                let archetypes = &self.world.archetypes();
-                id_iter
-                    // SAFETY: The if check ensures that matched_storage_ids stores ArchetypeIds
-                    .map(|id| unsafe { archetypes[id.archetype_id].len() })
-                    .max()
-            }
-            .unwrap_or(0)
-        };
-        self.batching_strategy
-            .calc_batch_size(max_items, thread_count)
     }
 }

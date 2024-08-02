@@ -1,8 +1,6 @@
 //! Event handling types.
 
 use crate as bevy_ecs;
-#[cfg(feature = "multi_threaded")]
-use crate::batching::BatchingStrategy;
 use crate::change_detection::MutUntyped;
 use crate::{
     change_detection::{DetectChangesMut, Mut},
@@ -474,47 +472,6 @@ impl<'w, 's, E: Event> EventReader<'w, 's, E> {
         self.reader.read_with_id(&self.events)
     }
 
-    /// Returns a parallel iterator over the events this [`EventReader`] has not seen yet.
-    /// See also [`for_each`](EventParIter::for_each).
-    ///
-    /// # Example
-    /// ```
-    /// # use bevy_ecs::prelude::*;
-    /// # use std::sync::atomic::{AtomicUsize, Ordering};
-    ///
-    /// #[derive(Event)]
-    /// struct MyEvent {
-    ///     value: usize,
-    /// }
-    ///
-    /// #[derive(Resource, Default)]
-    /// struct Counter(AtomicUsize);
-    ///
-    /// // setup
-    /// let mut world = World::new();
-    /// world.init_resource::<Events<MyEvent>>();
-    /// world.insert_resource(Counter::default());
-    ///
-    /// let mut schedule = Schedule::default();
-    /// schedule.add_systems(|mut events: EventReader<MyEvent>, counter: Res<Counter>| {
-    ///     events.par_read().for_each(|MyEvent { value }| {
-    ///         counter.0.fetch_add(*value, Ordering::Relaxed);
-    ///     });
-    /// });
-    /// for value in 0..100 {
-    ///     world.send_event(MyEvent { value });
-    /// }
-    /// schedule.run(&mut world);
-    /// let Counter(counter) = world.remove_resource::<Counter>().unwrap();
-    /// // all events were processed
-    /// assert_eq!(counter.into_inner(), 4950);
-    /// ```
-    ///
-    #[cfg(feature = "multi_threaded")]
-    pub fn par_read(&mut self) -> EventParIter<'_, E> {
-        self.reader.par_read(&self.events)
-    }
-
     /// Determines the number of events available to be read from this [`EventReader`] without consuming any.
     pub fn len(&self) -> usize {
         self.reader.len(&self.events)
@@ -723,12 +680,6 @@ impl<E: Event> ManualEventReader<E> {
         EventIteratorWithId::new(self, events)
     }
 
-    /// See [`EventReader::par_read`]
-    #[cfg(feature = "multi_threaded")]
-    pub fn par_read<'a>(&'a mut self, events: &'a Events<E>) -> EventParIter<'a, E> {
-        EventParIter::new(self, events)
-    }
-
     /// See [`EventReader::len`]
     pub fn len(&self, events: &Events<E>) -> usize {
         // The number of events in this reader is the difference between the most recent event
@@ -889,143 +840,6 @@ impl<'a, E: Event> Iterator for EventIteratorWithId<'a, E> {
 impl<'a, E: Event> ExactSizeIterator for EventIteratorWithId<'a, E> {
     fn len(&self) -> usize {
         self.unread
-    }
-}
-
-/// A parallel iterator over `Event`s.
-#[cfg(feature = "multi_threaded")]
-#[derive(Debug)]
-pub struct EventParIter<'a, E: Event> {
-    reader: &'a mut ManualEventReader<E>,
-    slices: [&'a [EventInstance<E>]; 2],
-    batching_strategy: BatchingStrategy,
-    unread: usize,
-}
-
-#[cfg(feature = "multi_threaded")]
-impl<'a, E: Event> EventParIter<'a, E> {
-    /// Creates a new parallel iterator over `events` that have not yet been seen by `reader`.
-    pub fn new(reader: &'a mut ManualEventReader<E>, events: &'a Events<E>) -> Self {
-        let a_index = reader
-            .last_event_count
-            .saturating_sub(events.events_a.start_event_count);
-        let b_index = reader
-            .last_event_count
-            .saturating_sub(events.events_b.start_event_count);
-        let a = events.events_a.get(a_index..).unwrap_or_default();
-        let b = events.events_b.get(b_index..).unwrap_or_default();
-
-        let unread_count = a.len() + b.len();
-        // Ensure `len` is implemented correctly
-        debug_assert_eq!(unread_count, reader.len(events));
-        reader.last_event_count = events.event_count - unread_count;
-
-        Self {
-            reader,
-            slices: [a, b],
-            batching_strategy: BatchingStrategy::default(),
-            unread: unread_count,
-        }
-    }
-
-    /// Changes the batching strategy used when iterating.
-    ///
-    /// For more information on how this affects the resultant iteration, see
-    /// [`BatchingStrategy`].
-    pub fn batching_strategy(mut self, strategy: BatchingStrategy) -> Self {
-        self.batching_strategy = strategy;
-        self
-    }
-
-    /// Runs the provided closure for each unread event in parallel.
-    ///
-    /// Unlike normal iteration, the event order is not guaranteed in any form.
-    ///
-    /// # Panics
-    /// If the [`ComputeTaskPool`] is not initialized. If using this from an event reader that is being
-    /// initialized and run from the ECS scheduler, this should never panic.
-    ///
-    /// [`ComputeTaskPool`]: bevy_tasks::ComputeTaskPool
-    pub fn for_each<FN: Fn(&'a E) + Send + Sync + Clone>(self, func: FN) {
-        self.for_each_with_id(move |e, _| func(e));
-    }
-
-    /// Runs the provided closure for each unread event in parallel, like [`for_each`](Self::for_each),
-    /// but additionally provides the `EventId` to the closure.
-    ///
-    /// Note that the order of iteration is not guaranteed, but `EventId`s are ordered by send order.
-    ///
-    /// # Panics
-    /// If the [`ComputeTaskPool`] is not initialized. If using this from an event reader that is being
-    /// initialized and run from the ECS scheduler, this should never panic.
-    ///
-    /// [`ComputeTaskPool`]: bevy_tasks::ComputeTaskPool
-    pub fn for_each_with_id<FN: Fn(&'a E, EventId<E>) + Send + Sync + Clone>(mut self, func: FN) {
-        #[cfg(any(target_arch = "wasm32", not(feature = "multi_threaded")))]
-        {
-            self.into_iter().for_each(|(e, i)| func(e, i));
-        }
-
-        #[cfg(all(not(target_arch = "wasm32"), feature = "multi_threaded"))]
-        {
-            let pool = bevy_tasks::ComputeTaskPool::get();
-            let thread_count = pool.thread_num();
-            if thread_count <= 1 {
-                return self.into_iter().for_each(|(e, i)| func(e, i));
-            }
-
-            let batch_size = self
-                .batching_strategy
-                .calc_batch_size(|| self.len(), thread_count);
-            let chunks = self.slices.map(|s| s.chunks_exact(batch_size));
-            let remainders = chunks.each_ref().map(|c| c.remainder());
-
-            pool.scope(|scope| {
-                for batch in chunks.into_iter().flatten().chain(remainders) {
-                    let func = func.clone();
-                    scope.spawn(async move {
-                        for event in batch {
-                            func(&event.event, event.event_id);
-                        }
-                    });
-                }
-            });
-
-            // Events are guaranteed to be read at this point.
-            self.reader.last_event_count += self.unread;
-            self.unread = 0;
-        }
-    }
-
-    /// Returns the number of [`Event`]s to be iterated.
-    pub fn len(&self) -> usize {
-        self.slices.iter().map(|s| s.len()).sum()
-    }
-
-    /// Returns [`true`] if there are no events remaining in this iterator.
-    pub fn is_empty(&self) -> bool {
-        self.slices.iter().all(|x| x.is_empty())
-    }
-}
-
-#[cfg(feature = "multi_threaded")]
-impl<'a, E: Event> IntoIterator for EventParIter<'a, E> {
-    type IntoIter = EventIteratorWithId<'a, E>;
-    type Item = <Self::IntoIter as Iterator>::Item;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let EventParIter {
-            reader,
-            slices: [a, b],
-            ..
-        } = self;
-        let unread = a.len() + b.len();
-        let chain = a.iter().chain(b);
-        EventIteratorWithId {
-            reader,
-            chain,
-            unread,
-        }
     }
 }
 

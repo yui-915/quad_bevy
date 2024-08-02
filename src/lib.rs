@@ -78,7 +78,6 @@ mod tests {
         system::Resource,
         world::{EntityRef, Mut, World},
     };
-    use bevy_tasks::{ComputeTaskPool, TaskPool};
     use std::num::NonZeroU32;
     use std::{
         any::TypeId,

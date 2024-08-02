@@ -98,7 +98,6 @@ mod tests {
         #[test]
         #[cfg(not(miri))]
         fn parallel_execution() {
-            use bevy_tasks::{ComputeTaskPool, TaskPool};
             use std::sync::{Arc, Barrier};
 
             let mut world = World::default();
