@@ -1,0 +1,9 @@
+[package]
+name = "quad_bevy"
+version = "0.0.1"
+authors = ["yui-915"]
+edition = "2021"
+description = "bevy_ecs for miniquad/macroquad without wasm-bindgen"
+repository = "https://github.com/yui-915/quad_bevy"
+license = "MIT OR Apache-2.0"
+keywords = ["bevy", "ecs", "macroquad", "miniquad"]
