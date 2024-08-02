@@ -57,10 +57,6 @@ version = "1.1.0"
 [features]
 detailed_trace = []
 
-[target."cfg(target_arch = \"wasm32\")".dependencies.getrandom]
-version = "0.2.0"
-features = ["js"]
-
 [lints.clippy]
 doc_markdown = "warn"
 manual_let_else = "warn"
